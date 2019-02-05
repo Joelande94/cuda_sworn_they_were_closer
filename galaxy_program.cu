@@ -155,33 +155,15 @@ void angle_between_galaxies(float *alphas1, float *deltas1, float *alphas2, floa
     }
 }
 
-
-// CUDA program that calculates distribution of galaxies
-int main()
-{
-    // Read files and store data in GalaxyFile classes.
-    GalaxyFile galaxies1;
-    GalaxyFile galaxies2;
-    galaxies1 = readFile("test_data/data_100k_arcmin.txt");
-    //galaxies2 = readFile("data_100k_arcmin.txt");
-    galaxies2 = readFile("test_data/data_100k_arcmin.txt");
-    
+int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
+    // Declare and allocate memory for histogram arrays that will be accessible on CPU
     float galaxy_array_size = galaxies1.number_of_galaxies * sizeof(float);
     float histogram_size = NUMBER_OF_BINS * sizeof(int);
 
-
-    // Declare and allocate memory for histogram arrays that will be accessible on CPU
-    int *DD_hist;  // DD
-    int *DR_hist;  // DR
-    int *RR_hist;  // RR
-    DD_hist = (int*) malloc(NUMBER_OF_BINS*sizeof(int));
-    DR_hist = (int*) malloc(NUMBER_OF_BINS*sizeof(int));
-    RR_hist = (int*) malloc(NUMBER_OF_BINS*sizeof(int));
-    int *histograms;
+    int *histogram;
     int *total_histogram;
-    histograms = (int *) malloc(NUMBER_OF_BINS*sizeof(int));
+    histogram = (int *) malloc(NUMBER_OF_BINS*sizeof(int));
     total_histogram = (int *) malloc(NUMBER_OF_BINS*sizeof(int));
-    float *results; results = (float*) malloc(galaxy_array_size);
 
     memset(total_histogram, 0, NUMBER_OF_BINS*sizeof(int));
 
@@ -190,24 +172,24 @@ int main()
     float *gpu_deltas1;
     float *gpu_alphas2;
     float *gpu_deltas2;
-    int *gpu_histograms;
+    int *gpu_histogram;
 
     // Allocate memory on GPU for angle arrays
     cudaMalloc((void**) &gpu_alphas1, galaxy_array_size);
     cudaMalloc((void**) &gpu_deltas1, galaxy_array_size);
     cudaMalloc((void**) &gpu_alphas2, galaxy_array_size);
     cudaMalloc((void**) &gpu_deltas2, galaxy_array_size);
-    cudaMalloc((void**) &gpu_histograms, NUMBER_OF_BINS*sizeof(int));
+    cudaMalloc((void**) &gpu_histogram, NUMBER_OF_BINS*sizeof(int));
 
 	// Copy angles from CPU onto GPU
 	cudaMemcpy(gpu_alphas1, galaxies1.alphas, galaxy_array_size, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_deltas1, galaxies1.deltas, galaxy_array_size, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_alphas2, galaxies2.alphas, galaxy_array_size, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_deltas2, galaxies2.deltas, galaxy_array_size, cudaMemcpyHostToDevice);
-	cudaMemcpy(gpu_histograms, histograms, galaxy_array_size, cudaMemcpyHostToDevice);
+	cudaMemcpy(gpu_histogram, histogram, galaxy_array_size, cudaMemcpyHostToDevice);
     
     int warp_size = 32;
-    int threadsInBlock = 16 * warp_size;
+    int threadsInBlock = 12 * warp_size;
     int blocksInGrid = ceil((galaxies1.number_of_galaxies + threadsInBlock-1) / threadsInBlock);
 
 	// Define the grid size (blocks per grid)
@@ -217,19 +199,17 @@ int main()
 	dim3 dimBlock(threadsInBlock);
 
     // Write histogram full of zeros
-    cudaMemset(gpu_histograms, 0, histogram_size);
+    cudaMemset(gpu_histogram, 0, histogram_size);
 
     // Calculate angles between galaxies1[i] and every galaxy in galaxies2
-    angle_between_galaxies<<<dimGrid, dimBlock>>>(gpu_alphas1, gpu_deltas1, gpu_alphas2, gpu_deltas2, gpu_histograms);
+    angle_between_galaxies<<<dimGrid, dimBlock>>>(gpu_alphas1, gpu_deltas1, gpu_alphas2, gpu_deltas2, gpu_histogram);
     
     // Copy result histogram into CPU histogram
-    cudaMemcpy(histograms, gpu_histograms, histogram_size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(histogram, gpu_histogram, histogram_size, cudaMemcpyDeviceToHost);
 
     // Add values from result histogram to total histogram
     for(int j=0; j<NUMBER_OF_BINS; j++){
-        //printf("total_histogram[%d] before: %d vs ", j, total_histogram[j]);
-        total_histogram[j] += histograms[j];
-        //printf("after %d\n", total_histogram[j]);
+        total_histogram[j] += histogram[j];
     }
     
 	// Free all the memory we allocated on the GPU
@@ -237,43 +217,45 @@ int main()
 	cudaFree( gpu_deltas1 );
 	cudaFree( gpu_alphas2 );
 	cudaFree( gpu_deltas2 );
-	cudaFree( gpu_histograms );
+    cudaFree( gpu_histogram );
 
-    /*
-    for (int i=0; i<4; i++) {
-        cout << results[i] << endl;
-    }
+    return total_histogram;
+}
 
-    for(int i=0; i<sizeof(results)/sizeof(float); i++){
-        // For each value in results
-        float deg = radians_to_degrees(results[i]);
-        int idx = floor(deg*4);
-        histogram[idx] += 1;
-    }
-    */
-
-
+void print_histogram(string label, int *histogram){
     long long galaxies_counted = 0;
-    long long prev = 0;
-    int wraps = 0;
-    // Print each bucket bin that has 1 or more galaxy in it.
+    // Print each bucket bin that has 1 or more galaxy-pair-angle in it.
     for (int i=0; i<NUMBER_OF_BINS; i++) {
         float bucket_min = (float)i / (1.0f/BIN_WIDTH);
         float bucket_max = (float)i / (1.0f/BIN_WIDTH) + BIN_WIDTH;
-        int bucket_value = total_histogram[i];
+        int bucket_value = histogram[i];
 
         if(bucket_value > 0){
-            if(galaxies_counted < prev){
-                wraps++;
-            }
-            printf("Bucket bin [%f, %f]: %d\n", bucket_min, bucket_max, bucket_value);
-            prev = galaxies_counted;
-            galaxies_counted += total_histogram[i];
+            printf("[%f, %f]: %d\n", bucket_min, bucket_max, bucket_value);
+            galaxies_counted += histogram[i];
         }
     }
 
-    printf("Galaxies that were counted: %lld\n", galaxies_counted);
-    printf("Galaxy counter wrapped %d times\n", wraps);
-    
+    cout << "Galaxies counted in " << label << ": " << galaxies_counted << endl;
+}
+
+// CUDA program that calculates distribution of galaxies
+int main()
+{
+    // Read files and store data in GalaxyFile classes.
+    GalaxyFile galaxies1;
+    GalaxyFile galaxies2;
+    galaxies1 = readFile("test_data/flat_100k_arcmin.txt");
+    //galaxies2 = readFile("data_100k_arcmin.txt");
+    galaxies2 = readFile("test_data/data_100k_arcmin.txt");
+
+    int* DD_hist = calculate_histogram(galaxies1, galaxies1);
+    int* DR_hist = calculate_histogram(galaxies1, galaxies2);
+    int* RR_hist = calculate_histogram(galaxies2, galaxies2);
+
+    print_histogram("Real to real", DD_hist);
+    print_histogram("Real to fake", DR_hist);
+    print_histogram("Fake to fake", RR_hist);
+
 	return EXIT_SUCCESS;
 }
