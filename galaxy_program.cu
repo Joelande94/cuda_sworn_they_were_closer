@@ -70,19 +70,14 @@
 
 using namespace std;
 
-
-#define PI 3.14159265359f
-#define TO_DEGREES 180.0f/PI
-
 #define BIN_WIDTH 0.25f
 #define BIN_MIN 0.0f
 #define BIN_MAX 180.0f
 #define NUMBER_OF_BINS (int)(BIN_MAX*(1.0f/BIN_WIDTH))
 
-
-float arcmins_to_radians(float minutes){
-    return 1.0f/60.0f*minutes/180.0f;
-}
+// Google is your friend.
+#define ARCMINS_TO_RADIANS 0.000290888209f
+#define TO_DEGREES 57.295779513f
 
 class GalaxyFile{
 public:
@@ -114,16 +109,16 @@ GalaxyFile readFile(string filename)
     alphas = (float*) malloc(galaxy_array_size);
     deltas = (float*) malloc(galaxy_array_size);
 
-    float angle1;
-    float angle2;
+    float alpha;
+    float delta;
 
     // Read arc minute angles for each galaxy
     // Then convert those angles to radians and store those in angles1 and angles2
     for(int i=0; i<number_of_galaxies; i++) {
-        infile >> angle1 >> angle2;
+        infile >> alpha >> delta;
 
-        alphas[i] = arcmins_to_radians(angle1);
-        deltas[i] = arcmins_to_radians(angle2);
+        alphas[i] = alpha * ARCMINS_TO_RADIANS;
+        deltas[i] = delta * ARCMINS_TO_RADIANS;
     }
     infile.close();
 
@@ -141,11 +136,8 @@ void angle_between_galaxies(float *alphas1, float *deltas1, float *alphas2, floa
                 float angle = 0.0f;
                 // Don't do duplicates
                 if( alphas1[i] != alphas2[idx] && deltas1[i] != deltas2[idx] ) {
-                    // Also try floating point version of sin and cos
-                    float x = sinf(deltas1[i]) * sinf(deltas2[idx]) + cosf(deltas1[i]) * cosf(deltas2[idx]) * cosf(alphas1[i] - alphas2[idx]);
-                    // fminf and fmaxf (x, 1.0f) might need the f on the end.
-                    x = fmaxf(-1.0f, fminf(x, 1.0f));
-                    angle = acosf(x) * TO_DEGREES; // try acosf() or facosf()??
+                    float x = sin(deltas1[i]) * sin(deltas2[idx]) + cos(deltas1[i]) * cos(deltas2[idx]) * cos(alphas1[i] - alphas2[idx]);
+                    angle = acosf(fmaxf(-1.0f, fminf(x, 1.0f))) * TO_DEGREES;
                 }
 
                 int ix = (int)(floor(angle * (1.0f/BIN_WIDTH))) % NUMBER_OF_BINS;
