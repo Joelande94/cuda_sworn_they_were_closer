@@ -139,17 +139,28 @@ void angle_between_galaxies(int i, float *alphas1, float *deltas1, float *alphas
     float delta1 = deltas1[i];
     float alpha2 = alphas2[idx];
     float delta2 = deltas2[idx];
-    float angle = acos(sin(delta1) * sin(delta2) + cos(delta1) * cos(delta2) * cos(alpha1 - alpha2));
-    angle = angle*TO_DEGREES;
-    
+
+    float angle = 0;
+
+    // Don't do duplicates
+    if( alpha1 != alpha2 && delta1 != delta2 ){
+        // Also try floating point version of sin and cos
+    	float x = sin(delta1) * sin(delta2) + cos(delta1) * cos(delta2) * cos(alpha1 - alpha2);
+        // fminf and fmaxf (x, 1.0f) might need the f on the end.
+        x = fminf(x, 1.0f);
+        x = fmaxf(-1.0f, x);
+        angle = acos(x); // try acosf() or facosf()??
+        angle = angle * TO_DEGREES;
+    }
+        
     __shared__ int shared_hist[NUMBER_OF_BINS];
     if(threadIdx.x == 0){
         for (int i=0; i<NUMBER_OF_BINS; i++) {
             shared_hist[i] = 0;
         }
     }
-    angle = angle * TO_DEGREES;
-    int ix = (int)(floor(angle * (1.0/BIN_WIDTH))) % NUMBER_OF_BINS;
+
+    int ix = (int)(floor(angle * (1.0f/BIN_WIDTH))) % NUMBER_OF_BINS;
     
     // Check that we're not going out of bounds.
     if(ix < 0){
