@@ -181,7 +181,7 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
 	cudaMemcpy(gpu_histogram, histogram, galaxy_array_size, cudaMemcpyHostToDevice);
     
     int warp_size = 32;
-    int threadsInBlock = 12 * warp_size;
+    int threadsInBlock = 11 * warp_size;
     int blocksInGrid = ceil((galaxies1.number_of_galaxies + threadsInBlock-1) / threadsInBlock);
 
 	// Define the grid size (blocks per grid)
