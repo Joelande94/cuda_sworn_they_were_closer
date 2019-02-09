@@ -166,7 +166,7 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
     
     int warp_size = 32;
     int threadsInBlock = 11 * warp_size;
-    int blocksInGrid = ceil((galaxies1.number_of_galaxies + threadsInBlock-1) / threadsInBlock);
+    int blocksInGrid = ceil((galaxies1.number_of_galaxies + threadsInBlock) / threadsInBlock);
 
 	// Define the grid size (blocks per grid)
     dim3 dimGrid(blocksInGrid);
