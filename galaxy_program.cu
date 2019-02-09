@@ -184,11 +184,6 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
     
     // Copy result histogram into CPU histogram
     cudaMemcpy(histogram, gpu_histogram, histogram_size, cudaMemcpyDeviceToHost);
-
-    // Add values from result histogram to total histogram
-    for(int j=0; j<NUMBER_OF_BINS; j++){
-        total_histogram[j] += histogram[j];
-    }
     
 	// Free all the memory we allocated on the GPU
 	cudaFree( gpu_alphas1 );
@@ -197,7 +192,7 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
 	cudaFree( gpu_deltas2 );
     cudaFree( gpu_histogram );
 
-    return total_histogram;
+    return histogram;
 }
 
 float* calculate_omegas(int* DD, int* DR, int* RR){
@@ -221,7 +216,6 @@ int main()
     GalaxyFile galaxies1;
     GalaxyFile galaxies2;
     galaxies1 = readFile("test_data/flat_100k_arcmin.txt");
-    //galaxies2 = readFile("data_100k_arcmin.txt");
     galaxies2 = readFile("test_data/data_100k_arcmin.txt");
 
     int* DD_hist = calculate_histogram(galaxies1, galaxies1);
