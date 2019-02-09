@@ -95,6 +95,8 @@ public:
         deltas = ds;
     }
 };
+void print_omegas(float*, int);
+void write_omegas_to_file(string, float*);
 void write_histogram_to_file(string, int*);
 void print_histogram(string, int*, int);
 GalaxyFile readFile(string);
@@ -198,6 +200,20 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
     return total_histogram;
 }
 
+float* calculate_omegas(int* DD, int* DR, int* RR){
+    float* omegas;
+    omegas = (float *) malloc(NUMBER_OF_BINS*sizeof(float));
+
+    for(int i=0; i<NUMBER_OF_BINS; i++){
+        if(RR[i] != 0.0f){
+            omegas[i] = (DD[i] - 2.0f*DR[i] + RR[i]) / RR[i];
+        }else{
+            omegas[i] = 0.0f;
+        }
+    }
+    return omegas;
+}
+
 // CUDA program that calculates distribution of galaxies
 int main()
 {
@@ -219,6 +235,10 @@ int main()
     write_histogram_to_file("dd_histogram.txt", DD_hist);
     write_histogram_to_file("dr_histogram.txt", DR_hist);
     write_histogram_to_file("rr_histogram.txt", RR_hist);
+
+    float* omegas = calculate_omegas(DD_hist, DR_hist, RR_hist);
+    print_omegas(omegas, NUMBER_OF_BINS);
+    write_omegas_to_file("omegas.txt", omegas);
 
 	return EXIT_SUCCESS;
 }
@@ -243,7 +263,7 @@ GalaxyFile readFile(string filename)
     float delta;
 
     // Read arc minute angles for each galaxy
-    // Then convert those angles to radians and store those in angles1 and angles2
+    // Then convert those angles to radians and store those in alphas and deltas arrays
     for(int i=0; i<number_of_galaxies; i++) {
         infile >> alpha >> delta;
 
@@ -254,6 +274,14 @@ GalaxyFile readFile(string filename)
 
     GalaxyFile galaxyFile(number_of_galaxies, alphas, deltas);
     return galaxyFile;
+}
+
+void print_omegas(float* omegas, int bins_to_print){
+    for (int i=0; i<NUMBER_OF_BINS; i++){
+        if(omegas[i] != 0.0f && i < bins_to_print){
+            printf("omegas[%d]: %f\n", i, omegas[i]);
+        }
+    }
 }
 
 void print_histogram(string label, int *histogram, int bins_to_print){
@@ -271,6 +299,17 @@ void print_histogram(string label, int *histogram, int bins_to_print){
     }
 
     cout << "Galaxies counted in " << label << ": " << galaxies_counted << endl;
+}
+
+void write_omegas_to_file(string filename, float* omegas){
+    ofstream file;
+    file.open("output/"+filename);
+
+    for (int i=0; i<NUMBER_OF_BINS; i++){
+        file << omegas[i];
+        if(i<NUMBER_OF_BINS-1) file << "\n";
+    }
+    file.close();
 }
 
 void write_histogram_to_file(string filename, int* histogram){
