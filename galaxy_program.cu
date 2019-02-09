@@ -63,6 +63,15 @@
             are used
         # of blocks = ceil(N/threadsInBlock)
                     = (N+threadsInBlock-1)/threadsInBlock
+
+
+
+Compile:
+nvcc -o galaxy galaxy_program.cu -res-usage
+
+Run:
+time ./galaxy
+
 */
 #include <stdio.h>
 #include <iostream>
@@ -70,15 +79,8 @@
 
 using namespace std;
 
-#define BIN_WIDTH 0.25f
-#define BIN_MIN 0.0f
-#define BIN_MAX 180.0f
-#define NUMBER_OF_BINS (int)(BIN_MAX*(1.0f/BIN_WIDTH))
 
-// Google is your friend.
-#define ARCMINS_TO_RADIANS 0.000290888209f
-#define TO_DEGREES 57.295779513f
-
+// Declare functions and classes that are below main.
 class GalaxyFile{
 public:
     int number_of_galaxies;
@@ -93,38 +95,20 @@ public:
         deltas = ds;
     }
 };
+void write_histogram_to_file(string, int*);
+void print_histogram(string, int*, int);
+GalaxyFile readFile(string);
 
 
-GalaxyFile readFile(string filename)
-{
-    ifstream infile(filename);
-    int number_of_galaxies;
+// Define some useful macros
+#define BIN_WIDTH 0.25f
+#define BIN_MIN 0.0f
+#define BIN_MAX 180.0f
+#define NUMBER_OF_BINS (int)(BIN_MAX*(1.0f/BIN_WIDTH))
 
-    // Read first line which is the number of galaxies that's stored in the file.
-    infile >> number_of_galaxies;
-
-    float galaxy_array_size = number_of_galaxies * sizeof(float);
-
-    float *alphas, *deltas;
-    alphas = (float*) malloc(galaxy_array_size);
-    deltas = (float*) malloc(galaxy_array_size);
-
-    float alpha;
-    float delta;
-
-    // Read arc minute angles for each galaxy
-    // Then convert those angles to radians and store those in angles1 and angles2
-    for(int i=0; i<number_of_galaxies; i++) {
-        infile >> alpha >> delta;
-
-        alphas[i] = alpha * ARCMINS_TO_RADIANS;
-        deltas[i] = delta * ARCMINS_TO_RADIANS;
-    }
-    infile.close();
-
-    GalaxyFile galaxyFile(number_of_galaxies, alphas, deltas);
-    return galaxyFile;
-}
+// Google is your friend.
+#define ARCMINS_TO_RADIANS 0.000290888209f
+#define RADIANS_TO_DEGREES 57.295779513f
 
 
 __global__
@@ -137,7 +121,7 @@ void angle_between_galaxies(float *alphas1, float *deltas1, float *alphas2, floa
                 // Don't do duplicates
                 if( alphas1[i] != alphas2[idx] && deltas1[i] != deltas2[idx] ) {
                     float x = sin(deltas1[i]) * sin(deltas2[idx]) + cos(deltas1[i]) * cos(deltas2[idx]) * cos(alphas1[i] - alphas2[idx]);
-                    angle = acosf(fmaxf(-1.0f, fminf(x, 1.0f))) * TO_DEGREES;
+                    angle = acosf(fmaxf(-1.0f, fminf(x, 1.0f))) * RADIANS_TO_DEGREES;
                 }
 
                 int ix = (int)(floor(angle * (1.0f/BIN_WIDTH))) % NUMBER_OF_BINS;
@@ -214,23 +198,6 @@ int* calculate_histogram(GalaxyFile galaxies1, GalaxyFile galaxies2){
     return total_histogram;
 }
 
-void print_histogram(string label, int *histogram){
-    long long galaxies_counted = 0;
-    // Print each bucket bin that has 1 or more galaxy-pair-angle in it.
-    for (int i=0; i<NUMBER_OF_BINS; i++) {
-        float bucket_min = (float)i / (1.0f/BIN_WIDTH);
-        float bucket_max = (float)i / (1.0f/BIN_WIDTH) + BIN_WIDTH;
-        int bucket_value = histogram[i];
-
-        if(bucket_value > 0){
-            printf("[%f, %f]: %d\n", bucket_min, bucket_max, bucket_value);
-            galaxies_counted += histogram[i];
-        }
-    }
-
-    cout << "Galaxies counted in " << label << ": " << galaxies_counted << endl;
-}
-
 // CUDA program that calculates distribution of galaxies
 int main()
 {
@@ -245,9 +212,74 @@ int main()
     int* DR_hist = calculate_histogram(galaxies1, galaxies2);
     int* RR_hist = calculate_histogram(galaxies2, galaxies2);
 
-    print_histogram("Real to real", DD_hist);
-    print_histogram("Real to fake", DR_hist);
-    print_histogram("Fake to fake", RR_hist);
+    print_histogram("real to real", DD_hist, 20);
+    print_histogram("real to fake", DR_hist, 20);
+    print_histogram("fake to fake", RR_hist, 20);
+
+    write_histogram_to_file("dd_histogram.txt", DD_hist);
+    write_histogram_to_file("dr_histogram.txt", DR_hist);
+    write_histogram_to_file("rr_histogram.txt", RR_hist);
 
 	return EXIT_SUCCESS;
+}
+
+
+/* UTILITY FUNCTIONS/CLASSES BELOW */
+GalaxyFile readFile(string filename)
+{
+    ifstream infile(filename);
+    int number_of_galaxies;
+
+    // Read first line which is the number of galaxies that's stored in the file.
+    infile >> number_of_galaxies;
+
+    float galaxy_array_size = number_of_galaxies * sizeof(float);
+
+    float *alphas, *deltas;
+    alphas = (float*) malloc(galaxy_array_size);
+    deltas = (float*) malloc(galaxy_array_size);
+
+    float alpha;
+    float delta;
+
+    // Read arc minute angles for each galaxy
+    // Then convert those angles to radians and store those in angles1 and angles2
+    for(int i=0; i<number_of_galaxies; i++) {
+        infile >> alpha >> delta;
+
+        alphas[i] = alpha * ARCMINS_TO_RADIANS;
+        deltas[i] = delta * ARCMINS_TO_RADIANS;
+    }
+    infile.close();
+
+    GalaxyFile galaxyFile(number_of_galaxies, alphas, deltas);
+    return galaxyFile;
+}
+
+void print_histogram(string label, int *histogram, int bins_to_print){
+    long long galaxies_counted = 0;
+    // Print each bucket bin that has 1 or more galaxy-pair-angle in it.
+    for (int i=0; i<NUMBER_OF_BINS; i++) {
+        float bucket_min = (float)i / (1.0f/BIN_WIDTH);
+        float bucket_max = (float)i / (1.0f/BIN_WIDTH) + BIN_WIDTH;
+        int bucket_value = histogram[i];
+
+        galaxies_counted += histogram[i];
+        if(bucket_value > 0 && i < bins_to_print){
+            printf("[%f, %f]: %d\n", bucket_min, bucket_max, bucket_value);
+        }
+    }
+
+    cout << "Galaxies counted in " << label << ": " << galaxies_counted << endl;
+}
+
+void write_histogram_to_file(string filename, int* histogram){
+    ofstream file;
+    file.open("output/"+filename);
+    
+    for (int i=0; i<NUMBER_OF_BINS; i++){
+        file << histogram[i]; 
+        if(i<NUMBER_OF_BINS-1) file << "\n";
+    }
+    file.close();
 }
