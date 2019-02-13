@@ -222,16 +222,16 @@ int main()
     int* DR_hist = calculate_histogram(galaxies1, galaxies2);
     int* RR_hist = calculate_histogram(galaxies2, galaxies2);
 
-    print_histogram("real to real", DD_hist, 20);
-    print_histogram("real to fake", DR_hist, 20);
-    print_histogram("fake to fake", RR_hist, 20);
+    print_histogram("DD", DD_hist, 20);
+    print_histogram("DR", DR_hist, 20);
+    print_histogram("RR", RR_hist, 20);
 
     write_histogram_to_file("dd_histogram.txt", DD_hist);
     write_histogram_to_file("dr_histogram.txt", DR_hist);
     write_histogram_to_file("rr_histogram.txt", RR_hist);
 
     float* omegas = calculate_omegas(DD_hist, DR_hist, RR_hist);
-    print_omegas(omegas, NUMBER_OF_BINS);
+    print_omegas(omegas, 15);
     write_omegas_to_file("omegas.txt", omegas);
 
 	return EXIT_SUCCESS;
@@ -292,7 +292,7 @@ void print_histogram(string label, int *histogram, int bins_to_print){
         }
     }
 
-    cout << "Galaxies counted in " << label << ": " << galaxies_counted << endl;
+    cout << "Galaxy pairs counted in " << label << ": " << galaxies_counted << endl;
 }
 
 void write_omegas_to_file(string filename, float* omegas){
